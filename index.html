@@ -44,4 +44,5 @@ function renderWorld(){drawTerrain();drawEnvironment();drawPlayer();if(!landed)$
 function update(){if(state!=='game')return;var sp=keys.shift?8:4;player.x+=(keys.a?-1:keys.d?1:0)*sp;player.z+=(keys.w?-1:keys.s?1:0)*sp;player.x=Math.max(-520,Math.min(520,player.x));player.z=Math.max(-500,Math.min(500,player.z));cam.x=player.x;cam.z=player.z+220;cam.y=landed?105:260;cam.pitch=landed?.16:.34;cam.yaw=(mouseX-.5)*.8;if(!landed&&performance.now()-jumpStart>6200)landed=true}
 function startDrop(){state='game';show('bus',0);show('game',1);landed=false;jumpStart=performance.now();player.x=0;player.z=0;ammo=30;$('ammo').textContent='30'}
 (function loop(){requestAnimationFrame(loop);update();if(state==='game')renderWorld()})();})();
-</script></body></html>
+</script><script src="map3d.js"></script>
+</body></html>
