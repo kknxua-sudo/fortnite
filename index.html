@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Storm Arena — Browser Battle</title>
+<style>
+  :root{--glass:rgba(10,16,28,.72);--line:rgba(255,255,255,.13);--text:#f4f7ff;--muted:#aab5ca;--accent:#55d6ff;}
+  *{box-sizing:border-box} html,body{margin:0;height:100%;overflow:hidden;background:#09111d;color:var(--text);font-family:Inter,system-ui,Segoe UI,Arial,sans-serif}
+  #game{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  .hud{position:fixed;inset:0;pointer-events:none}
+  .topbar{position:absolute;top:14px;left:14px;right:14px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .panel{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(9px);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .stats{padding:10px 12px;min-width:220px}.title{font-weight:800;letter-spacing:.08em;font-size:12px;text-transform:uppercase}.sub{font-size:12px;color:var(--muted);margin-top:3px}
+  .bar{height:10px;margin-top:8px;background:#1b2433;border-radius:20px;overflow:hidden}.fill{height:100%;width:100%;transition:width .15s}.hp{background:linear-gradient(90deg,#5be28a,#9af0a6)}.shield{background:linear-gradient(90deg,#49a9ff,#83dcff)}
+  .centerStatus{position:absolute;top:14px;left:50%;transform:translateX(-50%);text-align:center;padding:9px 12px;min-width:250px}
+  .zone{font-size:13px;font-weight:800}.zone small{display:block;color:var(--muted);font-weight:500;margin-top:2px}
+  .prompt{position:absolute;left:50%;bottom:132px;transform:translateX(-50%);padding:9px 12px;font-size:12px;opacity:.92}
+  .crosshair{position:absolute;left:50%;top:50%;width:22px;height:22px;transform:translate(-50%,-50%)}
+  .crosshair:before,.crosshair:after{content:"";position:absolute;background:rgba(255,255,255,.92);box-shadow:0 0 4px #000}.crosshair:before{left:10px;top:2px;width:2px;height:18px}.crosshair:after{left:2px;top:10px;width:18px;height:2px}
+  .bottom{position:absolute;left:14px;right:14px;bottom:14px;display:flex;align-items:end;justify-content:space-between;gap:12px}.kit{display:flex;gap:8px;pointer-events:auto}.slot{width:62px;height:62px;border:1px solid var(--line);border-radius:12px;background:var(--glass);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px}.slot.active{outline:2px solid var(--accent);box-shadow:0 0 16px rgba(85,214,255,.22)}.slot b{font-size:18px;margin-bottom:3px}
+  .controls{padding:10px 12px;display:flex;gap:14px;font-size:11px;color:var(--muted)}.controls b{color:#fff}.mobile{display:none;pointer-events:auto;position:absolute;inset:0}.stick{position:absolute;left:22px;bottom:24px;width:130px;height:130px;border-radius:50%;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05)}.knob{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px;border-radius:50%;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.18)}.actionPad{position:absolute;right:18px;bottom:18px;display:grid;grid-template-columns:repeat(2,68px);gap:10px}.act{width:68px;height:68px;border-radius:18px;border:1px solid rgba(255,255,255,.18);background:rgba(10,16,28,.55);color:#fff;font-weight:800}.act.big{grid-column:span 2;width:146px}
+  #overlay{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(circle at 50% 35%,rgba(28,68,93,.35),rgba(3,7,12,.92));z-index:10}.menu{width:min(720px,92vw);padding:28px;border-radius:22px;background:rgba(7,12,20,.92);border:1px solid rgba(255,255,255,.14);box-shadow:0 24px 80px rgba(0,0,0,.48)}.menu h1{margin:0 0 6px;font-size:clamp(28px,6vw,48px);letter-spacing:-.035em}.menu p{margin:0 0 16px;color:#b5c0d4;line-height:1.55}.buttons{display:flex;flex-wrap:wrap;gap:10px}.btn{border:0;border-radius:12px;padding:12px 16px;background:#1f3344;color:#fff;font-weight:800;cursor:pointer}.btn.primary{background:linear-gradient(135deg,#4ed4ff,#6ef7a7);color:#061019}.kbd{display:inline-block;padding:2px 6px;border:1px solid rgba(255,255,255,.16);border-radius:5px;background:#111927;color:#dce6f4}
+  @media (max-width:900px){.controls{display:none}.mobile{display:block}.bottom{bottom:6px}.stats{min-width:180px}.centerStatus{min-width:200px}}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="hud">
+  <div class="topbar">
+    <div class="panel stats">
+      <div class="title">Storm Arena</div><div class="sub" id="statusText">Eliminate every rival.</div>
+      <div class="bar"><div class="fill hp" id="hp"></div></div>
+      <div class="bar"><div class="fill shield" id="shield"></div></div>
+    </div>
+    <div class="panel centerStatus"><div class="zone" id="zoneText">Safe zone stable</div><small id="ammoText">Rifle • 18 / 90</small></div>
+  </div>
+  <div class="crosshair"></div>
+  <div class="panel prompt" id="prompt">Click the arena to capture the mouse. WASD to move · Mouse to aim · Click to fire.</div>
+  <div class="bottom">
+    <div class="kit">
+      <div class="slot active"><b>▣</b><span>Rifle</span></div>
+      <div class="slot"><b>▤</b><span>Wall</span></div>
+      <div class="slot"><b>◇</b><span>Ramp</span></div>
+      <div class="slot"><b>╳</b><span>Floor</span></div>
+    </div>
+    <div class="panel controls"><span><b>1</b> weapon</span><span><b>Q</b> wall</span><span><b>E</b> ramp</span><span><b>R</b> floor</span><span><b>Space</b> jump</span><span><b>Shift</b> sprint</span></div>
+  </div>
+  <div class="mobile">
+    <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+    <div class="actionPad"><button class="act" id="jump">JUMP</button><button class="act" id="build">BUILD</button><button class="act big" id="shoot">FIRE</button></div>
+  </div>
+</div>
+<div id="overlay"><div class="menu"><h1>Storm Arena</h1><p>A lightweight, original browser battle sandbox inspired by the movement, gunplay, and build-loop of modern battle-royale games. It uses no external game assets.</p><div class="buttons"><button class="btn primary" id="start">Play</button><button class="btn" id="how">Controls</button></div><p id="help" style="display:none;margin-top:16px"><span class="kbd">WASD</span> move · <span class="kbd">Mouse</span> aim · <span class="kbd">Click</span> shoot · <span class="kbd">Q/E/R</span> build · <span class="kbd">Space</span> jump · <span class="kbd">Shift</span> sprint · <span class="kbd">Esc</span> release mouse.</p></div></div>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha:false });
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('start');
+  const helpBtn = document.getElementById('how');
+  const help = document.getElementById('help');
+  const hpEl = document.getElementById('hp'), shieldEl = document.getElementById('shield');
+  const zoneEl = document.getElementById('zoneText'), ammoEl = document.getElementById('ammoText'), statusEl = document.getElementById('statusText');
+  const promptEl = document.getElementById('prompt');
+  let W=innerWidth,H=innerHeight,dpr=Math.min(devicePixelRatio||1,1.5);
+  function resize(){ W=innerWidth;H=innerHeight;canvas.width=Math.floor(W*dpr);canvas.height=Math.floor(H*dpr);canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0); }
+  addEventListener('resize',resize); resize();
+
+  const MAP=40, TILE=1, FOV=Math.PI/3, FAR=28;
+  const world=[];
+  for(let y=0;y<MAP;y++){ world[y]=[]; for(let x=0;x<MAP;x++) world[y][x]=(x===0||y===0||x===MAP-1||y===MAP-1||Math.random()<0.045)?1:0; }
+  for(let y=8;y<32;y+=6) for(let x=8;x<32;x+=7){ if(Math.random()<.7) for(let k=0;k<3;k++) world[y+k][x]=1; }
+  const builds=[];
+  const player={x:20.5,y:20.5,a:0,hp:100,shield:50,ammo:18,reserve:90,cool:0,vy:0,z:0,speed:3.6,sprint:5.7,kills:0};
+  const bots=[];
+  function spawnBot(i){
+    let x=4+Math.random()*(MAP-8),y=4+Math.random()*(MAP-8); let tries=0; while((world[y|0]?.[x|0]||0)||Math.hypot(x-player.x,y-player.y)<7){x=4+Math.random()*(MAP-8);y=4+Math.random()*(MAP-8);if(++tries>500)return;}
+    bots.push({x,y,a:Math.random()*Math.PI*2,hp:100,cool:.4+Math.random(),speed:1.2+Math.random()*.5,alive:true,strafe:Math.random()<.5?1:-1});
+  }
+  for(let i=0;i<12;i++) spawnBot(i);
+  const keys=new Set(), mouse={x:0,y:0,down:false};
+  addEventListener('keydown',e=>{keys.add(e.code); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault(); if(e.code==='KeyQ') buildPiece('wall'); if(e.code==='KeyE') buildPiece('ramp'); if(e.code==='KeyR') buildPiece('floor'); if(e.code==='Digit1') weapon='rifle';});
+  addEventListener('keyup',e=>keys.delete(e.code));
+  canvas.addEventListener('mousemove',e=>{if(document.pointerLockElement===canvas) player.a += e.movementX*0.0022; mouse.x=e.clientX;mouse.y=e.clientY;});
+  canvas.addEventListener('mousedown',e=>{if(e.button===0){mouse.down=true;if(document.pointerLockElement!==canvas && overlay.style.display==='none')canvas.requestPointerLock?.();fire();}});
+  addEventListener('mouseup',()=>mouse.down=false);
+  canvas.addEventListener('click',()=>{if(overlay.style.display==='none')canvas.requestPointerLock?.();});
+  document.addEventListener('pointerlockchange',()=>{promptEl.style.display=document.pointerLockElement===canvas?'none':'block';});
+
+  let weapon='rifle', last=performance.now(), running=false, zone=17, phase=0, notice='', noticeT=0;
+  const rayCount = () => Math.max(170, Math.min(360, Math.floor(W/2.5)));
+  function cellSolid(x,y){ if(x<0||y<0||x>=MAP||y>=MAP)return true; return world[y|0][x|0]===1 || builds.some(b=>b.type!=='floor' && Math.floor(b.x)===x && Math.floor(b.y)===y); }
+  function moveEntity(o,dx,dy){ const r=.25; if(!cellSolid(o.x+dx+r,o.y) && !cellSolid(o.x+dx-r,o.y))o.x+=dx; if(!cellSolid(o.x,o.y+dy+r)&&!cellSolid(o.x,o.y+dy-r))o.y+=dy; }
+  function fire(){ if(!running||player.cool>0)return; if(player.ammo<=0){if(player.reserve>0){player.ammo=18;player.reserve-=18;}else{notice='No ammo';noticeT=1;return;}} player.ammo--; player.cool=.11;
+    const maxD=26; let best=null, bestAng=.045;
+    for(const b of bots)if(b.alive){const dx=b.x-player.x,dy=b.y-player.y,d=Math.hypot(dx,dy),ang=Math.atan2(dy,dx)-player.a; const da=Math.atan2(Math.sin(ang),Math.cos(ang)); if(Math.abs(da)<bestAng && d<maxD && !blocked(player.x,player.y,b.x,b.y)){best=b;bestAng=Math.abs(da);}}
+    if(best){best.hp-=34; if(best.hp<=0){best.alive=false;player.kills++;notice='Elimination';noticeT=1.2;}}
+  }
+  function blocked(x1,y1,x2,y2){const d=Math.hypot(x2-x1,y2-y1), n=Math.ceil(d*8); for(let i=1;i<n;i++){const t=i/n;if(cellSolid(x1+(x2-x1)*t,y1+(y2-y1)*t))return true;}return false;}
+  function buildPiece(type){ if(!running)return; const x=Math.floor(player.x+Math.cos(player.a)*2),y=Math.floor(player.y+Math.sin(player.a)*2); if(x<1||y<1||x>=MAP-1||y>=MAP-1)return; builds.push({x:x+.5,y:y+.5,type,hp:type==='ramp'?180:200,t:20}); if(builds.length>70)builds.shift(); notice=type.toUpperCase()+' placed';noticeT=.6; }
+  function damage(d){ if(player.shield>0){const s=Math.min(player.shield,d);player.shield-=s;d-=s;}player.hp-=d; if(player.hp<=0)end('You were eliminated'); }
+  function end(msg){running=false;overlay.style.display='grid';overlay.querySelector('h1').textContent=msg;startBtn.textContent='Play again';release();}
+  function release(){if(document.pointerLockElement===canvas)document.exitPointerLock?.();}
+  function reset(){player.x=20.5;player.y=20.5;player.a=0;player.hp=100;player.shield=50;player.ammo=18;player.reserve=90;player.cool=0;player.kills=0;player.z=0;player.vy=0;builds.length=0;bots.length=0;for(let i=0;i<12;i++)spawnBot(i);zone=17;phase=0;notice='';noticeT=0;running=true;overlay.style.display='none';canvas.requestPointerLock?.();}
+  startBtn.onclick=reset; helpBtn.onclick=()=>help.style.display=help.style.display==='none'?'block':'none';
+  function update(dt){
+    if(!running)return;
+    const mx=(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0), my=(keys.has('KeyW')?1:0)-(keys.has('KeyS')?1:0); let l=Math.hypot(mx,my)||1, sp=keys.has('ShiftLeft')||keys.has('ShiftRight')?player.sprint:player.speed; const c=Math.cos(player.a),s=Math.sin(player.a); moveEntity(player,(c*my - s*mx)/l*sp*dt,(s*my + c*mx)/l*sp*dt);
+    if(keys.has('Space') && player.z===0)player.vy=5.5; player.vy-=11*dt; player.z+=player.vy*dt;if(player.z<0){player.z=0;player.vy=0;}
+    player.cool=Math.max(0,player.cool-dt); if(mouse.down)fire();
+    for(const b of bots)if(b.alive){const dx=player.x-b.x,dy=player.y-b.y,d=Math.hypot(dx,dy); b.a=Math.atan2(dy,dx); if(d>3){moveEntity(b,Math.cos(b.a)*b.speed*dt*b.strafe*0.25,Math.sin(b.a)*b.speed*dt*b.strafe*0.25);} if(d<14 && !blocked(b.x,b.y,player.x,player.y) && (b.cool-=dt)<=0){b.cool=.85+Math.random()*.7;damage(4+Math.random()*4);}}
+    bots.splice(0,bots.length- bots.filter(b=>b.alive).length); for(const b of bots){} // keep array compact without disturbing references below
+    phase+=dt; if(phase>7 && zone>6){phase=0;zone-=.6;} const zd=Math.hypot(player.x-MAP/2,player.y-MAP/2); if(zd>zone){damage(dt*2.2);zoneEl.textContent='Storm closing — move inward';}else zoneEl.textContent='Safe zone stable';
+    for(let i=builds.length-1;i>=0;i--){builds[i].t-=dt;if(builds[i].t<=0)builds.splice(i,1)}
+    if(bots.filter(b=>b.alive).length===0)end('Victory Royale');
+    hpEl.style.width=Math.max(0,player.hp)+'%'; shieldEl.style.width=Math.max(0,player.shield*2)+'%'; ammoEl.textContent=`Rifle • ${player.ammo} / ${player.reserve}`;statusEl.textContent=`Elims ${player.kills} • Rivals ${bots.filter(b=>b.alive).length}`;noticeT=Math.max(0,noticeT-dt);
+  }
+  function render(){
+    ctx.fillStyle='#0b1623';ctx.fillRect(0,0,W,H); const sky=ctx.createLinearGradient(0,0,0,H*.6);sky.addColorStop(0,'#6eb8d6');sky.addColorStop(1,'#b9e0e5');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H*.55);ctx.fillStyle='#49644b';ctx.fillRect(0,H*.55,W,H*.45);
+    const rays=rayCount(), colW=W/rays, zbuf=new Float32Array(rays);
+    for(let i=0;i<rays;i++){const cam=i/rays-.5, ang=player.a+cam*FOV, sx=player.x,sy=player.y;let dist=0,hit=false;while(dist<FAR&&!hit){dist+=.04;const x=sx+Math.cos(ang)*dist,y=sy+Math.sin(ang)*dist;hit=cellSolid(x,y);} const corr=dist*Math.cos(ang-player.a);zbuf[i]=corr;const h=Math.min(H*.9,H/(corr*.85));const top=H*.55-h/2; const shade=Math.max(35,150-corr*4);ctx.fillStyle=`rgb(${shade*0.45},${shade*0.7},${shade})`;ctx.fillRect(i*colW,top,colW+1,h);}
+    // simple distant build highlights / bots
+    for(let i=0;i<bots.length;i++){const b=bots[i];if(!b.alive)continue;drawSprite(b.x,b.y,'#ff786e',20,zbuf,rays,colW);} 
+    drawVignette(); if(noticeT>0){ctx.font='800 15px system-ui';ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,.96)';ctx.fillText(notice,W/2,H*.72);}
+  }
+  function drawSprite(x,y,color,size,zbuf,rays,colW){const dx=x-player.x,dy=y-player.y,d=Math.hypot(dx,dy);let a=Math.atan2(dy,dx)-player.a;a=Math.atan2(Math.sin(a),Math.cos(a));if(Math.abs(a)>FOV*.56)return;const sx=(a/FOV+.5)*W;const idx=Math.max(0,Math.min(rays-1,Math.floor(sx/colW)));if(d>zbuf[idx]+.3)return;const h=Math.min(H*.45,H/(d*.75));ctx.fillStyle=color;ctx.fillRect(sx-size/2,H*.55-h,size,h);ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(sx-size*.6,H*.55-h-8,size*1.2,5);}
+  function drawVignette(){const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.22,W/2,H/2,Math.max(W,H)*.72);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.5)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);}
+  function loop(t){const dt=Math.min(.033,(t-last)/1000);last=t;update(dt);render();requestAnimationFrame(loop);} requestAnimationFrame(loop);
+
+  // Mobile controls
+  const stick=document.getElementById('stick'),knob=document.getElementById('knob'),jump=document.getElementById('jump'),buildBtn=document.getElementById('build'),shoot=document.getElementById('shoot');
+  let stickOn=false, sx0=0, sy0=0;
+  stick.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];stickOn=true;sx0=t.clientX;sy0=t.clientY;});
+  stick.addEventListener('touchmove',e=>{if(!stickOn)return;const t=e.touches[0],dx=Math.max(-42,Math.min(42,t.clientX-sx0)),dy=Math.max(-42,Math.min(42,t.clientY-sy0));knob.style.transform=`translate(${dx}px,${dy}px)`; for(const c of ['KeyW','KeyA','KeyS','KeyD'])keys.delete(c); if(Math.abs(dy)>10)keys.add(dy<0?'KeyW':'KeyS');if(Math.abs(dx)>10)keys.add(dx<0?'KeyA':'KeyD');});
+  stick.addEventListener('touchend',()=>{stickOn=false;knob.style.transform='';for(const c of ['KeyW','KeyA','KeyS','KeyD'])keys.delete(c);});
+  jump.addEventListener('touchstart',()=>{keys.add('Space');setTimeout(()=>keys.delete('Space'),120)}); buildBtn.addEventListener('touchstart',()=>buildPiece('wall')); shoot.addEventListener('touchstart',()=>{mouse.down=true;fire()}); shoot.addEventListener('touchend',()=>mouse.down=false);
+})();
+</script>
+</body>
+</html>
